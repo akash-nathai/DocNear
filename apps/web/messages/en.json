@@ -1,0 +1,67 @@
+{
+  "Common": {
+    "loading": "Loading...",
+    "error": "Something went wrong",
+    "retry": "Try again",
+    "cancel": "Cancel",
+    "save": "Save",
+    "back": "Back",
+    "next": "Next",
+    "submit": "Submit",
+    "close": "Close"
+  },
+  "Nav": {
+    "findDoctors": "Find Doctors",
+    "blog": "Health Blog",
+    "pharmacy": "Pharmacy",
+    "login": "Login",
+    "signup": "Sign Up",
+    "dashboard": "Dashboard",
+    "bookings": "My Bookings",
+    "logout": "Logout"
+  },
+  "Home": {
+    "hero": "Find Trusted Doctors Near You",
+    "subhero": "Book appointments instantly. No waiting, no queues.",
+    "searchPlaceholder": "Search doctors, specialities, symptoms...",
+    "locationPrompt": "Share your location for nearby doctors",
+    "bookOnline": "Book Video Consult",
+    "bookClinic": "Book Clinic Visit"
+  },
+  "DoctorCard": {
+    "experience": "{years} yrs exp",
+    "consultFee": "₹{amount}",
+    "bookNow": "Book Now",
+    "available": "Available Today",
+    "nextSlot": "Next: {slot}",
+    "away": "{distance} km away"
+  },
+  "BookingFlow": {
+    "selectSlot": "Select a time slot",
+    "slotHeld": "Slot held for {seconds}s",
+    "slotExpired": "Your slot has expired. Please select another.",
+    "payNow": "Pay ₹{amount}",
+    "bookingConfirmed": "Booking Confirmed!",
+    "bookingRef": "Booking ID: {ref}"
+  },
+  "Auth": {
+    "loginTitle": "Welcome back",
+    "signupPatient": "Create Patient Account",
+    "signupDoctor": "Register as Doctor",
+    "phone": "Phone number",
+    "email": "Email address",
+    "password": "Password",
+    "otp": "Enter OTP",
+    "otpSent": "OTP sent to {phone}",
+    "resendIn": "Resend in {seconds}s",
+    "resend": "Resend OTP",
+    "googleLogin": "Continue with Google",
+    "pendingApproval": "Your application is under review",
+    "pendingDesc": "We'll notify you within 2-3 business days."
+  },
+  "Errors": {
+    "slotTaken": "This slot was just taken. Please choose another time.",
+    "paymentFailed": "Payment failed. Your slot has been released.",
+    "networkError": "Network error. Please check your connection."
+  }
+}

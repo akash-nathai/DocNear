@@ -1,0 +1,67 @@
+{
+  "Common": {
+    "loading": "लोड हो रहा है...",
+    "error": "कुछ गलत हो गया",
+    "retry": "पुनः प्रयास करें",
+    "cancel": "रद्द करें",
+    "save": "सहेजें",
+    "back": "वापस",
+    "next": "आगे",
+    "submit": "जमा करें",
+    "close": "बंद करें"
+  },
+  "Nav": {
+    "findDoctors": "डॉक्टर खोजें",
+    "blog": "स्वास्थ्य ब्लॉग",
+    "pharmacy": "फार्मेसी",
+    "login": "लॉगिन",
+    "signup": "साइन अप",
+    "dashboard": "डैशबोर्ड",
+    "bookings": "मेरी बुकिंग",
+    "logout": "लॉगआउट"
+  },
+  "Home": {
+    "hero": "अपने नजदीक विश्वसनीय डॉक्टर खोजें",
+    "subhero": "तुरंत अपॉइंटमेंट बुक करें। कोई प्रतीक्षा नहीं।",
+    "searchPlaceholder": "डॉक्टर, विशेषज्ञता, लक्षण खोजें...",
+    "locationPrompt": "आस-पास के डॉक्टरों के लिए अपनी लोकेशन शेयर करें",
+    "bookOnline": "वीडियो कंसल्ट बुक करें",
+    "bookClinic": "क्लिनिक विजिट बुक करें"
+  },
+  "DoctorCard": {
+    "experience": "{years} वर्ष का अनुभव",
+    "consultFee": "₹{amount}",
+    "bookNow": "अभी बुक करें",
+    "available": "आज उपलब्ध",
+    "nextSlot": "अगला: {slot}",
+    "away": "{distance} किमी दूर"
+  },
+  "BookingFlow": {
+    "selectSlot": "समय स्लॉट चुनें",
+    "slotHeld": "स्लॉट {seconds} सेकंड के लिए रखा गया है",
+    "slotExpired": "आपका स्लॉट समाप्त हो गया। कृपया दूसरा चुनें।",
+    "payNow": "₹{amount} का भुगतान करें",
+    "bookingConfirmed": "बुकिंग कन्फर्म हो गई!",
+    "bookingRef": "बुकिंग ID: {ref}"
+  },
+  "Auth": {
+    "loginTitle": "वापस स्वागत है",
+    "signupPatient": "मरीज़ खाता बनाएं",
+    "signupDoctor": "डॉक्टर के रूप में रजिस्टर करें",
+    "phone": "फ़ोन नंबर",
+    "email": "ईमेल पता",
+    "password": "पासवर्ड",
+    "otp": "OTP दर्ज करें",
+    "otpSent": "{phone} पर OTP भेजा गया",
+    "resendIn": "{seconds} सेकंड में पुनः भेजें",
+    "resend": "OTP पुनः भेजें",
+    "googleLogin": "Google से जारी रखें",
+    "pendingApproval": "आपका आवेदन समीक्षाधीन है",
+    "pendingDesc": "हम आपको 2-3 कार्यदिवसों में सूचित करेंगे।"
+  },
+  "Errors": {
+    "slotTaken": "यह स्लॉट अभी लिया गया। कृपया दूसरा समय चुनें।",
+    "paymentFailed": "भुगतान विफल। आपका स्लॉट जारी कर दिया गया है।",
+    "networkError": "नेटवर्क त्रुटि। कृपया अपना कनेक्शन जांचें।"
+  }
+}
