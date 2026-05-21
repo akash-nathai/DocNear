@@ -1,20 +1,24 @@
-import { Stack } from 'expo-router';
-import { StatusBar } from 'expo-status-bar';
+import { useEffect } from 'react';
+import { Stack, router } from 'expo-router';
+import { useAuthStore } from '../store/auth';
+import { api } from '../lib/api';
+import type { AuthUser } from '../store/auth';
+
+interface RefreshRes { accessToken: string; user: AuthUser }
 
 export default function RootLayout() {
+  const setAuth = useAuthStore((s) => s.setAuth);
+
+  useEffect(() => {
+    api.post<RefreshRes>('/auth/refresh', {})
+      .then((res) => { setAuth(res.user, res.accessToken); })
+      .catch(() => { router.replace('/(auth)/login' as never); });
+  }, [setAuth]);
+
   return (
-    <>
-      <Stack
-        screenOptions={{
-          headerStyle: { backgroundColor: '#0EA5E9' },
-          headerTintColor: '#fff',
-          headerTitleStyle: { fontWeight: 'bold' },
-        }}
-      >
-        <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-        <Stack.Screen name="+not-found" />
-      </Stack>
-      <StatusBar style="auto" />
-    </>
+    <Stack screenOptions={{ headerShown: false }}>
+      <Stack.Screen name="(tabs)" />
+      <Stack.Screen name="(auth)" />
+    </Stack>
   );
 }

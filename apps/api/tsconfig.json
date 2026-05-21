@@ -4,7 +4,9 @@
     "baseUrl": "./",
     "outDir": "./dist",
     "paths": {
-      "@/*": ["src/*"]
+      "@/*": ["src/*"],
+      "@docnear/shared-types": ["../../packages/shared-types/src/index.ts"],
+      "@docnear/shared-types/*": ["../../packages/shared-types/src/*"]
     }
   },
   "include": ["src/**/*"],

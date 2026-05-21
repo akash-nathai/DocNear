@@ -6,6 +6,7 @@ const withNextIntl = createNextIntlPlugin('./src/i18n/config.ts');
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
+  output: 'standalone', // required for Docker runner stage
   images: {
     remotePatterns: [
       { protocol: 'http', hostname: 'localhost', port: '9000' }, // MinIO dev
