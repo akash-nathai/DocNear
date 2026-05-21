@@ -2,7 +2,7 @@ import type { JSX } from 'react';
 import type { Metadata } from 'next';
 import { Inter } from 'next/font/google';
 import { NextIntlClientProvider } from 'next-intl';
-import { getMessages, getTranslations } from 'next-intl/server';
+import { getMessages, getTranslations, setRequestLocale } from 'next-intl/server';
 import { notFound } from 'next/navigation';
 import { routing } from '@/i18n/routing';
 import { QueryProvider } from '@/providers/query-provider';
@@ -45,6 +45,9 @@ export default async function LocaleLayout({
   if (!routing.locales.includes(locale as 'en' | 'hi' | 'bn')) {
     notFound();
   }
+
+  // Enable static rendering
+  setRequestLocale(locale);
 
   const messages = await getMessages();
 

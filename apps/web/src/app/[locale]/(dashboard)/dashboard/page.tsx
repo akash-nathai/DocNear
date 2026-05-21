@@ -1,5 +1,5 @@
 import type { JSX } from 'react';
-import { getTranslations } from 'next-intl/server';
+import { getTranslations, setRequestLocale } from 'next-intl/server';
 import type { Metadata } from 'next';
 
 export async function generateMetadata({
@@ -11,7 +11,13 @@ export async function generateMetadata({
   return { title: t('dashboard') };
 }
 
-export default function DashboardPage(): JSX.Element {
+export default function DashboardPage({
+  params: { locale },
+}: {
+  params: { locale: string };
+}): JSX.Element {
+  setRequestLocale(locale);
+
   return (
     <main className="min-h-screen bg-gray-50 p-8">
       <h1 className="text-2xl font-bold text-gray-900">Dashboard</h1>

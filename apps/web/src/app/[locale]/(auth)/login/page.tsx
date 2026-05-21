@@ -1,5 +1,5 @@
 import type { JSX } from 'react';
-import { getTranslations } from 'next-intl/server';
+import { getTranslations, setRequestLocale } from 'next-intl/server';
 import { useTranslations } from 'next-intl';
 import type { Metadata } from 'next';
 
@@ -12,7 +12,13 @@ export async function generateMetadata({
   return { title: t('loginTitle') };
 }
 
-export default function LoginPage(): JSX.Element {
+export default function LoginPage({
+  params: { locale },
+}: {
+  params: { locale: string };
+}): JSX.Element {
+  setRequestLocale(locale);
+
   const t = useTranslations('Auth');
 
   return (

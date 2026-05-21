@@ -1,6 +1,6 @@
 import type { JSX } from 'react';
 import { useTranslations } from 'next-intl';
-import { getTranslations } from 'next-intl/server';
+import { getTranslations, setRequestLocale } from 'next-intl/server';
 import type { Metadata } from 'next';
 
 export async function generateMetadata({
@@ -12,7 +12,13 @@ export async function generateMetadata({
   return { title: t('findDoctors') };
 }
 
-export default function FindDoctorsPage(): JSX.Element {
+export default function FindDoctorsPage({
+  params: { locale },
+}: {
+  params: { locale: string };
+}): JSX.Element {
+  setRequestLocale(locale);
+
   const t = useTranslations('Home');
 
   return (
@@ -32,7 +38,7 @@ export default function FindDoctorsPage(): JSX.Element {
             <input
               type="text"
               placeholder={t('searchPlaceholder')}
-              className="w-full rounded-xl border border-gray-300 bg-white px-5 py-4 text-base shadow-sm focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/20"
+              className="w-full rounded-xl border border-gray-300 bg-white px-5 py-4 text-base shadow-sm focus:outline-none focus:ring-2 focus:ring-sky-500/20"
             />
           </div>
         </div>
