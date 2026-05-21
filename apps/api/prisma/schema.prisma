@@ -1,0 +1,14 @@
+// DocNear Prisma Schema — stub for Phase 2 scaffold.
+// Full schema implemented in Phase 3 (database migrations).
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// Full schema — see docs/02-DATABASE.md v1.1
+// Implemented in Phase 3: pnpm db:migrate
