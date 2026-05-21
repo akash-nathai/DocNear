@@ -1,5 +1,10 @@
 import { Module } from '@nestjs/common';
+import { PatientsController } from './patients.controller';
+import { PatientsService } from './patients.service';
 
-// Stub — fully implemented in Phase 4+
-@Module({})
+@Module({
+  controllers: [PatientsController],
+  providers: [PatientsService],
+  exports: [PatientsService],
+})
 export class PatientsModule {}

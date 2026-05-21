@@ -46,9 +46,13 @@ export const configuration = () => ({
     msg91OtpTemplateId: process.env['MSG91_OTP_TEMPLATE_ID'] ?? '',
     sendgridApiKey: process.env['SENDGRID_API_KEY'] ?? '',
     sendgridFromEmail: process.env['SENDGRID_FROM_EMAIL'] ?? 'noreply@docnear.in',
-    fcmProjectId: process.env['FCM_PROJECT_ID'] ?? '',
-    fcmClientEmail: process.env['FCM_CLIENT_EMAIL'] ?? '',
-    fcmPrivateKey: process.env['FCM_PRIVATE_KEY'] ?? '',
+  },
+
+  fcm: {
+    projectId: process.env['FCM_PROJECT_ID'] ?? '',
+    clientEmail: process.env['FCM_CLIENT_EMAIL'] ?? '',
+    // Private key arrives with literal \n from .env — FirebaseService handles replacement
+    privateKey: process.env['FCM_PRIVATE_KEY'] ?? '',
   },
 
   google: {

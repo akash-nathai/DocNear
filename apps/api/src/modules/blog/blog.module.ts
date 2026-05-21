@@ -1,5 +1,9 @@
 import { Module } from '@nestjs/common';
+import { BlogController } from './blog.controller';
+import { BlogService } from './blog.service';
 
-// Stub — fully implemented in Phase 4+
-@Module({})
+@Module({
+  controllers: [BlogController],
+  providers: [BlogService],
+})
 export class BlogModule {}

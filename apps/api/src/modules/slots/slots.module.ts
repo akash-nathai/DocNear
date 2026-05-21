@@ -1,5 +1,10 @@
 import { Module } from '@nestjs/common';
+import { SlotsController } from './slots.controller';
+import { SlotsService } from './slots.service';
 
-// Stub — fully implemented in Phase 4+
-@Module({})
+@Module({
+  controllers: [SlotsController],
+  providers: [SlotsService],
+  exports: [SlotsService],
+})
 export class SlotsModule {}

@@ -1,5 +1,9 @@
 import { Module } from '@nestjs/common';
+import { AdminController } from './admin.controller';
+import { AdminService } from './admin.service';
 
-// Stub — fully implemented in Phase 4+
-@Module({})
+@Module({
+  controllers: [AdminController],
+  providers: [AdminService],
+})
 export class AdminModule {}

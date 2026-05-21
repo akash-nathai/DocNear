@@ -1,5 +1,17 @@
-// DocNear Prisma Schema — stub for Phase 2 scaffold.
-// Full schema implemented in Phase 3 (database migrations).
+// DocNear Prisma Schema — v1.1
+// Engine: PostgreSQL 16 + PostGIS | ORM: Prisma
+//
+// NOTES FOR CONTRIBUTORS:
+//  1. The bookings partial unique index (idx_bookings_slot_unique) CANNOT be
+//     expressed in Prisma @@unique because Prisma doesn't support WHERE clauses.
+//     It lives in the raw SQL migration only. Prisma's client respects it at DB level.
+//  2. clinics.location is a PostGIS GEOGRAPHY GENERATED ALWAYS AS column.
+//     Prisma can't generate it; it's typed as Unsupported("geography") here.
+//     Read via $queryRaw; never write (it's auto-computed from lat/lng).
+//  3. notifications and audit_logs are RANGE-partitioned tables. Prisma treats
+//     them as regular tables; partitions are created in the raw migration.
+//  4. Array columns (qualifications, languages, tags) are PostgreSQL TEXT[].
+//     Prisma supports them natively for the postgresql provider.
 
 generator client {
   provider = "prisma-client-js"
@@ -10,5 +22,1057 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-// Full schema — see docs/02-DATABASE.md v1.1
-// Implemented in Phase 3: pnpm db:migrate
+// ─────────────────────────────────────────────────────────────────────────────
+// ENUMERATIONS
+// ─────────────────────────────────────────────────────────────────────────────
+
+enum Role {
+  SUPER_ADMIN
+  DOCTOR
+  PATIENT
+
+  @@map("role_enum")
+}
+
+enum UserStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  SUSPENDED
+
+  @@map("user_status_enum")
+}
+
+enum DoctorStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  SUSPENDED
+
+  @@map("doctor_status_enum")
+}
+
+enum PatientStatus {
+  PENDING
+  APPROVED
+  SUSPENDED
+
+  @@map("patient_status_enum")
+}
+
+enum ConsultationType {
+  IN_CLINIC
+  VIDEO
+  HOME_VISIT
+
+  @@map("consultation_type_enum")
+}
+
+// v1.1: CANCELLED_BY_SYSTEM added for BullMQ slot-expiry sweep
+enum BookingStatus {
+  PENDING_PAYMENT
+  CONFIRMED
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED_BY_PATIENT
+  CANCELLED_BY_DOCTOR
+  CANCELLED_BY_SYSTEM
+  NO_SHOW
+
+  @@map("booking_status_enum")
+}
+
+// v1.1: SYSTEM added for BullMQ auto-expiry
+enum CancelledBy {
+  PATIENT
+  DOCTOR
+  ADMIN
+  SYSTEM
+
+  @@map("cancelled_by_enum")
+}
+
+enum PaymentStatus {
+  PENDING
+  CAPTURED
+  FAILED
+  REFUNDED
+  PARTIALLY_REFUNDED
+
+  @@map("payment_status_enum")
+}
+
+enum RefundStatus {
+  PENDING
+  PROCESSED
+  FAILED
+
+  @@map("refund_status_enum")
+}
+
+// v1.1: TECHNICAL_FAILURE added
+enum ConsultationStatus {
+  WAITING
+  ACTIVE
+  COMPLETED
+  ABANDONED
+  TECHNICAL_FAILURE
+
+  @@map("consultation_status_enum")
+}
+
+enum NotifType {
+  BOOKING_CONFIRMED
+  BOOKING_REMINDER_24H
+  BOOKING_REMINDER_1H
+  BOOKING_REMINDER_15M
+  CONSULT_STARTED
+  CONSULT_ENDED
+  PRESCRIPTION_READY
+  BOOKING_CANCELLED
+  DOCTOR_APPROVED
+  DOCTOR_REJECTED
+  REVIEW_REQUEST
+  PAYOUT_PROCESSED
+
+  @@map("notif_type_enum")
+}
+
+enum NotifChannel {
+  IN_APP
+  EMAIL
+  SMS
+  PUSH
+  WHATSAPP
+
+  @@map("notif_channel_enum")
+}
+
+enum NotifStatus {
+  PENDING
+  SENT
+  FAILED
+  DELIVERED
+
+  @@map("notif_status_enum")
+}
+
+enum CouponType {
+  FLAT
+  PERCENT
+
+  @@map("coupon_type_enum")
+}
+
+// v1.1: scoped coupon applicability
+enum CouponApplicable {
+  BOOKING
+  PHARMACY
+  BOTH
+
+  @@map("coupon_applicable_enum")
+}
+
+enum BlogStatus {
+  DRAFT
+  PUBLISHED
+  ARCHIVED
+
+  @@map("blog_status_enum")
+}
+
+enum PharmacyOrderStatus {
+  PLACED
+  VERIFIED
+  PACKED
+  SHIPPED
+  DELIVERED
+  CANCELLED
+
+  @@map("pharmacy_order_status_enum")
+}
+
+enum PayoutStatus {
+  REQUESTED
+  PROCESSING
+  COMPLETED
+  FAILED
+
+  @@map("payout_status_enum")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// USERS
+// ─────────────────────────────────────────────────────────────────────────────
+
+model User {
+  id            String      @id @default(uuid())
+  // v1.1: PII/PCI stored encrypted (BYTEA); hash shadow columns for uniqueness
+  emailEnc      Bytes?      @map("email_enc")           // ENCRYPTED — AES-256-CBC
+  emailHash     String?     @unique @map("email_hash")  // SHA-256(lower(email))
+  phoneEnc      Bytes?      @map("phone_enc")           // ENCRYPTED
+  phoneHash     String?     @unique @map("phone_hash")  // SHA-256(phone)
+  passwordHash  String?     @map("password_hash")       // bcrypt(12); null for OAuth
+  role          Role
+  status        UserStatus  @default(PENDING)
+  firstName     String      @map("first_name")
+  lastName      String      @map("last_name")
+  avatarUrl     String?     @map("avatar_url")
+  googleId      String?     @unique @map("google_id")
+  emailVerified Boolean     @default(false) @map("email_verified")
+  phoneVerified Boolean     @default(false) @map("phone_verified")
+  lastLoginAt   DateTime?   @map("last_login_at") @db.Timestamptz  // v1.1
+  createdAt     DateTime    @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt     DateTime    @updatedAt @map("updated_at") @db.Timestamptz
+  deletedAt     DateTime?   @map("deleted_at") @db.Timestamptz
+
+  // Relations
+  doctorProfile       DoctorProfile?
+  patientProfile      PatientProfile?
+  notifications       Notification[]
+  deviceTokens        DeviceToken[]
+  notifPreferences    NotificationPreference[]
+  auditLogs           AuditLog[]
+  passwordResets      PasswordReset[]
+  emailVerifications  EmailVerification[]
+  couponRedemptions   CouponRedemption[]
+  blogPosts           BlogPost[]
+  systemSettingsUpdated SystemSetting[]
+  payoutsProcessed    Payout[]     @relation("PayoutProcessor")
+  verifiedDoctors     DoctorProfile[] @relation("DoctorVerifier")
+
+  @@index([role])
+  @@index([status])
+  @@index([deletedAt])
+  @@map("users")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// DOCTOR PROFILES
+// ─────────────────────────────────────────────────────────────────────────────
+
+model DoctorProfile {
+  id                     String       @id @default(uuid())
+  userId                 String       @unique @map("user_id")
+  mciRegNo               String       @unique @map("mci_reg_no")
+  qualifications         String[]     @map("qualifications") @db.Text
+  bio                    String?
+  experienceYears        Int          @default(0) @map("experience_years")
+  gender                 String?
+  languages              String[]     @default(["English"]) @map("languages") @db.Text
+  consultationFeeClinic  Int          @default(0) @map("consultation_fee_clinic")   // paise
+  consultationFeeOnline  Int          @default(0) @map("consultation_fee_online")   // paise
+  slotDurationMinutes    Int          @default(15) @map("slot_duration_minutes")
+  registrationDocUrl     String?      @map("registration_doc_url")
+  idProofUrl             String?      @map("id_proof_url")
+  verificationStatus     DoctorStatus @default(PENDING) @map("verification_status")
+  rejectionReason        String?      @map("rejection_reason")
+  verifiedBy             String?      @map("verified_by")
+  verifiedAt             DateTime?    @map("verified_at") @db.Timestamptz
+  avgRating              Float        @default(0.0) @map("avg_rating")
+  totalReviews           Int          @default(0) @map("total_reviews")
+  totalConsultations     Int          @default(0) @map("total_consultations")
+  slug                   String       @unique
+  createdAt              DateTime     @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt              DateTime     @updatedAt @map("updated_at") @db.Timestamptz
+
+  // Relations
+  user             User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  verifier         User?              @relation("DoctorVerifier", fields: [verifiedBy], references: [id])
+  bankAccount      DoctorBankAccount?
+  specialities     DoctorSpeciality[]
+  clinics          Clinic[]
+  availability     DoctorAvailability[]
+  overrides        AvailabilityOverride[]
+  bookings         Booking[]
+  prescriptions    Prescription[]
+  reviews          Review[]
+  earnings         DoctorEarning[]
+  payouts          Payout[]
+
+  @@index([verificationStatus])
+  @@index([avgRating(sort: Desc)])
+  @@map("doctor_profiles")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// DOCTOR BANK ACCOUNTS
+// ─────────────────────────────────────────────────────────────────────────────
+
+// v1.1: NEW — bank details for Razorpay payouts; account number encrypted
+model DoctorBankAccount {
+  id                    String   @id @default(uuid())
+  doctorId              String   @unique @map("doctor_id")
+  accountNumberEnc      Bytes    @map("account_number_enc")          // ENCRYPTED — PCI
+  last4                 String   @map("last4")
+  ifscCode              String   @map("ifsc_code")
+  holderName            String   @map("holder_name")
+  bankName              String?  @map("bank_name")
+  razorpayContactId     String?  @map("razorpay_contact_id")
+  razorpayFundAccountId String?  @map("razorpay_fund_account_id")
+  isVerified            Boolean  @default(false) @map("is_verified")
+  createdAt             DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt             DateTime @updatedAt @map("updated_at") @db.Timestamptz
+
+  doctor DoctorProfile @relation(fields: [doctorId], references: [id], onDelete: Cascade)
+
+  @@map("doctor_bank_accounts")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// PATIENT PROFILES
+// ─────────────────────────────────────────────────────────────────────────────
+
+model PatientProfile {
+  id                   String        @id @default(uuid())
+  userId               String        @unique @map("user_id")
+  dobEnc               Bytes?        @map("dob_enc")                  // ENCRYPTED — PHI
+  bloodGroup           String?       @map("blood_group")
+  gender               String?
+  allergiesEnc         Bytes?        @map("allergies_enc")            // ENCRYPTED — PHI
+  chronicConditionsEnc Bytes?        @map("chronic_conditions_enc")   // ENCRYPTED — PHI
+  verificationStatus   PatientStatus @default(PENDING) @map("verification_status")
+  createdAt            DateTime      @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt            DateTime      @updatedAt @map("updated_at") @db.Timestamptz
+
+  // Relations
+  user          User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  familyMembers FamilyMember[]
+  bookings      Booking[]
+  prescriptions Prescription[]
+  reviews       Review[]
+  pharmacyOrders PharmacyOrder[]
+
+  @@map("patient_profiles")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// FAMILY MEMBERS
+// ─────────────────────────────────────────────────────────────────────────────
+
+model FamilyMember {
+  id         String   @id @default(uuid())
+  patientId  String   @map("patient_id")
+  name       String
+  relation   String   // SPOUSE | CHILD | PARENT | SIBLING | OTHER
+  dob        DateTime? @db.Date
+  gender     String?
+  bloodGroup String?  @map("blood_group")
+  allergies  String[] @db.Text
+  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt  DateTime @updatedAt @map("updated_at") @db.Timestamptz
+
+  patient  PatientProfile @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  bookings Booking[]
+
+  @@index([patientId])
+  @@map("family_members")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SPECIALITIES
+// ─────────────────────────────────────────────────────────────────────────────
+
+model Speciality {
+  id          String   @id @default(uuid())
+  name        String   @unique
+  slug        String   @unique
+  iconUrl     String?  @map("icon_url")
+  description String?
+  isActive    Boolean  @default(true) @map("is_active")
+  sortOrder   Int      @default(0) @map("sort_order")
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamptz
+
+  doctors    DoctorSpeciality[]
+  blogPosts  BlogPost[]
+
+  @@index([sortOrder])
+  @@map("specialities")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// DOCTOR SPECIALITIES (composite PK join table)
+// ─────────────────────────────────────────────────────────────────────────────
+
+// v1.1: explicit composite PK (doctorId, specialityId)
+// The partial unique index for one_primary is created in raw SQL migration:
+//   CREATE UNIQUE INDEX idx_doc_spec_one_primary
+//     ON doctor_specialities(doctor_id) WHERE is_primary = TRUE;
+model DoctorSpeciality {
+  doctorId     String   @map("doctor_id")
+  specialityId String   @map("speciality_id")
+  isPrimary    Boolean  @default(false) @map("is_primary")
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz
+
+  doctor     DoctorProfile @relation(fields: [doctorId], references: [id], onDelete: Cascade)
+  speciality Speciality    @relation(fields: [specialityId], references: [id], onDelete: Cascade)
+
+  @@id([doctorId, specialityId])
+  @@index([specialityId])
+  @@map("doctor_specialities")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// CITIES
+// ─────────────────────────────────────────────────────────────────────────────
+
+model City {
+  id        String   @id @default(uuid())
+  name      String
+  state     String
+  slug      String   @unique
+  lat       Float
+  lng       Float
+  isActive  Boolean  @default(true) @map("is_active")
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz
+
+  clinics Clinic[]
+
+  @@index([name])
+  @@map("cities")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// CLINICS
+// ─────────────────────────────────────────────────────────────────────────────
+
+// v1.1: location is a PostGIS GEOGRAPHY GENERATED ALWAYS AS (ST_MakePoint(lng, lat)) STORED column.
+// Prisma cannot generate or write to it. Declare as Unsupported; read via $queryRaw.
+model Clinic {
+  id            String                  @id @default(uuid())
+  doctorId      String                  @map("doctor_id")
+  name          String
+  addressLine1  String                  @map("address_line1")
+  addressLine2  String?                 @map("address_line2")
+  cityId        String                  @map("city_id")
+  pincode       String
+  lat           Float
+  lng           Float
+  // PostGIS generated column — do NOT write; read via $queryRaw with ST_Distance etc.
+  location      Unsupported("geography")? @map("location")
+  phone         String?
+  workingHours  Json                    @default("{}") @map("working_hours")
+  isActive      Boolean                 @default(true) @map("is_active")
+  sortOrder     Int                     @default(0) @map("sort_order")
+  createdAt     DateTime                @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt     DateTime                @updatedAt @map("updated_at") @db.Timestamptz
+
+  doctor       DoctorProfile         @relation(fields: [doctorId], references: [id], onDelete: Cascade)
+  city         City                  @relation(fields: [cityId], references: [id])
+  availability DoctorAvailability[]
+  overrides    AvailabilityOverride[]
+  bookings     Booking[]
+
+  @@index([doctorId])
+  @@index([cityId])
+  @@map("clinics")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// DOCTOR AVAILABILITY
+// ─────────────────────────────────────────────────────────────────────────────
+
+model DoctorAvailability {
+  id          String           @id @default(uuid())
+  doctorId    String           @map("doctor_id")
+  clinicId    String?          @map("clinic_id")  // null = online slot
+  dayOfWeek   Int              @map("day_of_week") // 0=Sunday … 6=Saturday
+  startTime   DateTime         @map("start_time") @db.Time  // time only
+  endTime     DateTime         @map("end_time") @db.Time
+  consultType ConsultationType @map("consult_type")
+  isActive    Boolean          @default(true) @map("is_active")
+  createdAt   DateTime         @default(now()) @map("created_at") @db.Timestamptz
+
+  doctor DoctorProfile @relation(fields: [doctorId], references: [id], onDelete: Cascade)
+  clinic Clinic?       @relation(fields: [clinicId], references: [id], onDelete: SetNull)
+
+  @@index([doctorId, dayOfWeek])
+  @@map("doctor_availability")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// AVAILABILITY OVERRIDES
+// ─────────────────────────────────────────────────────────────────────────────
+
+model AvailabilityOverride {
+  id           String    @id @default(uuid())
+  doctorId     String    @map("doctor_id")
+  overrideDate DateTime  @map("override_date") @db.Date
+  isDayOff     Boolean   @default(false) @map("is_day_off")
+  startTime    DateTime? @map("start_time") @db.Time
+  endTime      DateTime? @map("end_time") @db.Time
+  clinicId     String?   @map("clinic_id")
+  reason       String?
+  createdAt    DateTime  @default(now()) @map("created_at") @db.Timestamptz
+
+  doctor DoctorProfile @relation(fields: [doctorId], references: [id], onDelete: Cascade)
+  clinic Clinic?       @relation(fields: [clinicId], references: [id], onDelete: SetNull)
+
+  @@unique([doctorId, overrideDate])
+  @@map("availability_overrides")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// BOOKINGS
+// ─────────────────────────────────────────────────────────────────────────────
+
+// v1.1: CANCELLED_BY_SYSTEM added.
+// The slot uniqueness constraint is a PARTIAL UNIQUE INDEX in raw SQL migration.
+// Prisma @@unique does not support WHERE predicates — see migration.sql.
+model Booking {
+  id                 String          @id @default(uuid())
+  bookingRef         String          @unique @map("booking_ref")    // DOC-YYYYMMDD-XXXXXX
+  doctorId           String          @map("doctor_id")
+  patientId          String          @map("patient_id")
+  familyMemberId     String?         @map("family_member_id")
+  clinicId           String?         @map("clinic_id")
+  slotDatetime       DateTime        @map("slot_datetime") @db.Timestamptz
+  consultType        ConsultationType @map("consult_type")
+  status             BookingStatus   @default(PENDING_PAYMENT)
+  patientNotes       String?         @map("patient_notes")
+  doctorNotes        String?         @map("doctor_notes")
+  feeCharged         Int             @map("fee_charged")            // paise; locked at creation
+  couponId           String?         @map("coupon_id")
+  discountAmount     Int             @default(0) @map("discount_amount")
+  cancellationReason String?         @map("cancellation_reason")
+  cancelledBy        CancelledBy?    @map("cancelled_by")
+  cancelledAt        DateTime?       @map("cancelled_at") @db.Timestamptz
+  confirmedAt        DateTime?       @map("confirmed_at") @db.Timestamptz
+  completedAt        DateTime?       @map("completed_at") @db.Timestamptz
+  createdAt          DateTime        @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt          DateTime        @updatedAt @map("updated_at") @db.Timestamptz
+
+  doctor       DoctorProfile   @relation(fields: [doctorId], references: [id])
+  patient      PatientProfile  @relation(fields: [patientId], references: [id])
+  familyMember FamilyMember?   @relation(fields: [familyMemberId], references: [id])
+  clinic       Clinic?         @relation(fields: [clinicId], references: [id])
+  coupon       Coupon?         @relation(fields: [couponId], references: [id])
+  payment      Payment?
+  consultation Consultation?
+  prescription Prescription?
+  review       Review?
+  earning      DoctorEarning?
+  redemptions  CouponRedemption[]
+
+  // Note: slot partial-unique index is in raw SQL migration, not here
+  @@index([doctorId, slotDatetime(sort: Desc)])
+  @@index([patientId, createdAt(sort: Desc)])
+  @@index([status])
+  @@index([createdAt])   // used by BullMQ sweep job on PENDING_PAYMENT rows
+  @@map("bookings")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// PAYMENTS
+// ─────────────────────────────────────────────────────────────────────────────
+
+model Payment {
+  id                  String        @id @default(uuid())
+  bookingId           String        @unique @map("booking_id")
+  razorpayOrderId     String        @unique @map("razorpay_order_id")
+  razorpayPaymentId   String?       @unique @map("razorpay_payment_id")
+  razorpaySignature   String?       @map("razorpay_signature")
+  status              PaymentStatus @default(PENDING)
+  amountPaise         Int           @map("amount_paise")
+  currency            String        @default("INR")
+  method              String?       // 'upi', 'card', 'netbanking', etc.
+  gatewayResponse     Json?         @map("gateway_response")
+  paidAt              DateTime?     @map("paid_at") @db.Timestamptz
+  createdAt           DateTime      @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt           DateTime      @updatedAt @map("updated_at") @db.Timestamptz
+
+  booking Booking  @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  refunds Refund[]
+
+  @@index([status])
+  @@map("payments")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// WEBHOOK EVENTS (idempotency)
+// ─────────────────────────────────────────────────────────────────────────────
+
+// v1.1: NEW — INSERT … ON CONFLICT DO NOTHING; 0 rows = duplicate, skip.
+model WebhookEvent {
+  id          String   @id @default(uuid())
+  provider    String                     // 'razorpay', 'fcm', etc.
+  eventId     String   @map("event_id") // provider's globally unique event ID
+  eventType   String   @map("event_type")
+  payload     Json
+  processedAt DateTime @default(now()) @map("processed_at") @db.Timestamptz
+
+  @@unique([provider, eventId])
+  @@index([provider, processedAt(sort: Desc)])
+  @@map("webhook_events")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// REFUNDS
+// ─────────────────────────────────────────────────────────────────────────────
+
+model Refund {
+  id                String       @id @default(uuid())
+  paymentId         String       @map("payment_id")
+  razorpayRefundId  String?      @unique @map("razorpay_refund_id")
+  amountPaise       Int          @map("amount_paise")
+  status            RefundStatus @default(PENDING)
+  reason            String?
+  gatewayResponse   Json?        @map("gateway_response")
+  createdAt         DateTime     @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt         DateTime     @updatedAt @map("updated_at") @db.Timestamptz
+
+  payment Payment @relation(fields: [paymentId], references: [id], onDelete: Cascade)
+
+  @@index([paymentId])
+  @@map("refunds")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// CONSULTATIONS
+// ─────────────────────────────────────────────────────────────────────────────
+
+// v1.1: TECHNICAL_FAILURE added to ConsultationStatus enum
+model Consultation {
+  id                  String              @id @default(uuid())
+  bookingId           String              @unique @map("booking_id")
+  hmsRoomId           String?             @map("hms_room_id")
+  hmsRoomCodeDoctor   String?             @map("hms_room_code_doctor")
+  hmsRoomCodePatient  String?             @map("hms_room_code_patient")
+  startedAt           DateTime?           @map("started_at") @db.Timestamptz
+  endedAt             DateTime?           @map("ended_at") @db.Timestamptz
+  durationSeconds     Int?                @map("duration_seconds")
+  status              ConsultationStatus  @default(WAITING)
+  createdAt           DateTime            @default(now()) @map("created_at") @db.Timestamptz
+
+  booking Booking @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+
+  @@index([status])
+  @@map("consultations")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// PRESCRIPTIONS
+// ─────────────────────────────────────────────────────────────────────────────
+
+// v1.1: medicines, diagnosis, advice stored encrypted — PHI
+model Prescription {
+  id           String   @id @default(uuid())
+  bookingId    String   @unique @map("booking_id")
+  doctorId     String   @map("doctor_id")
+  patientId    String   @map("patient_id")
+  medicinesEnc Bytes    @default("") @map("medicines_enc")  // ENCRYPTED — PHI
+  diagnosisEnc Bytes?   @map("diagnosis_enc")               // ENCRYPTED — PHI
+  adviceEnc    Bytes?   @map("advice_enc")                  // ENCRYPTED — PHI
+  followUpIn   String?  @map("follow_up_in")               // e.g. "2 weeks"
+  pdfUrl       String?  @map("pdf_url")
+  isFinalized  Boolean  @default(false) @map("is_finalized")
+  finalizedAt  DateTime? @map("finalized_at") @db.Timestamptz
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt    DateTime @updatedAt @map("updated_at") @db.Timestamptz
+
+  booking Booking        @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  doctor  DoctorProfile  @relation(fields: [doctorId], references: [id])
+  patient PatientProfile @relation(fields: [patientId], references: [id])
+
+  @@index([patientId])
+  @@index([doctorId])
+  @@map("prescriptions")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// REVIEWS
+// ─────────────────────────────────────────────────────────────────────────────
+
+model Review {
+  id        String   @id @default(uuid())
+  bookingId String   @unique @map("booking_id")
+  doctorId  String   @map("doctor_id")
+  patientId String   @map("patient_id")
+  rating    Int      // 1–5
+  comment   String?
+  tags      String[] @db.Text
+  isVisible Boolean  @default(true) @map("is_visible")
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz
+
+  booking Booking        @relation(fields: [bookingId], references: [id])
+  doctor  DoctorProfile  @relation(fields: [doctorId], references: [id])
+  patient PatientProfile @relation(fields: [patientId], references: [id])
+
+  @@index([doctorId, createdAt(sort: Desc)])
+  @@map("reviews")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// NOTIFICATIONS (partitioned by month)
+// ─────────────────────────────────────────────────────────────────────────────
+
+// v1.1: PARTITION BY RANGE (created_at) — monthly partitions, 90-day archival.
+// Partitions are created in raw SQL migration; Prisma treats this as a regular table.
+// Composite PK (id, created_at) required by PostgreSQL for partitioned tables.
+model Notification {
+  id           String      @default(uuid())
+  userId       String      @map("user_id")
+  type         NotifType
+  channel      NotifChannel
+  title        String
+  body         String
+  data         Json?
+  isRead       Boolean     @default(false) @map("is_read")
+  sentAt       DateTime?   @map("sent_at") @db.Timestamptz
+  readAt       DateTime?   @map("read_at") @db.Timestamptz
+  status       NotifStatus @default(PENDING)
+  errorMessage String?     @map("error_message")
+  createdAt    DateTime    @default(now()) @map("created_at") @db.Timestamptz
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([id, createdAt])
+  @@index([userId, createdAt(sort: Desc)])
+  @@map("notifications")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// NOTIFICATION PREFERENCES
+// ─────────────────────────────────────────────────────────────────────────────
+
+// v1.1: NEW — per-user opt-in/out. No row = enabled (default).
+model NotificationPreference {
+  id        String       @id @default(uuid())
+  userId    String       @map("user_id")
+  notifType NotifType    @map("notif_type")
+  channel   NotifChannel
+  isEnabled Boolean      @default(true) @map("is_enabled")
+  updatedAt DateTime     @updatedAt @map("updated_at") @db.Timestamptz
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, notifType, channel])
+  @@map("notification_preferences")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// COUPONS
+// ─────────────────────────────────────────────────────────────────────────────
+
+// v1.1: applicable_to + per_user_limit added
+model Coupon {
+  id             String           @id @default(uuid())
+  code           String           @unique
+  type           CouponType
+  applicableTo   CouponApplicable @default(BOTH) @map("applicable_to")   // v1.1
+  value          Int
+  minOrderAmount Int              @default(0) @map("min_order_amount")
+  maxDiscount    Int?             @map("max_discount")
+  usageLimit     Int?             @map("usage_limit")
+  perUserLimit   Int              @default(1) @map("per_user_limit")      // v1.1
+  usageCount     Int              @default(0) @map("usage_count")
+  validFrom      DateTime         @map("valid_from") @db.Timestamptz
+  validUntil     DateTime         @map("valid_until") @db.Timestamptz
+  isActive       Boolean          @default(true) @map("is_active")
+  createdAt      DateTime         @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt      DateTime         @updatedAt @map("updated_at") @db.Timestamptz
+
+  bookings       Booking[]
+  pharmacyOrders PharmacyOrder[]
+  redemptions    CouponRedemption[]
+
+  @@index([code])
+  @@index([applicableTo])
+  @@map("coupons")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// COUPON REDEMPTIONS
+// ─────────────────────────────────────────────────────────────────────────────
+
+// v1.1: NEW — tracks every redemption for per-user-limit enforcement
+model CouponRedemption {
+  id         String   @id @default(uuid())
+  couponId   String   @map("coupon_id")
+  userId     String   @map("user_id")
+  bookingId  String?  @map("booking_id")       // set for BOOKING / BOTH coupons
+  orderId    String?  @map("order_id")         // set for PHARMACY / BOTH coupons
+  redeemedAt DateTime @default(now()) @map("redeemed_at") @db.Timestamptz
+
+  coupon        Coupon         @relation(fields: [couponId], references: [id])
+  user          User           @relation(fields: [userId], references: [id])
+  booking       Booking?       @relation(fields: [bookingId], references: [id])
+  pharmacyOrder PharmacyOrder? @relation(fields: [orderId], references: [id])
+
+  @@index([couponId, userId])
+  @@map("coupon_redemptions")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// AUDIT LOGS (partitioned by month)
+// ─────────────────────────────────────────────────────────────────────────────
+
+// Composite PK (id, created_at) required for partitioned table in PG.
+// Retained indefinitely (regulatory requirement).
+model AuditLog {
+  id           String    @default(uuid())
+  actorId      String?   @map("actor_id")
+  action       String
+  resourceType String    @map("resource_type")
+  resourceId   String?   @map("resource_id")
+  oldValue     Json?     @map("old_value")
+  newValue     Json?     @map("new_value")
+  ipAddress    String?   @map("ip_address")
+  userAgent    String?   @map("user_agent")
+  createdAt    DateTime  @default(now()) @map("created_at") @db.Timestamptz
+
+  actor User? @relation(fields: [actorId], references: [id], onDelete: SetNull)
+
+  @@id([id, createdAt])
+  @@index([actorId, createdAt(sort: Desc)])
+  @@index([resourceType, resourceId])
+  @@map("audit_logs")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// DOCTOR EARNINGS & PAYOUTS
+// ─────────────────────────────────────────────────────────────────────────────
+
+model DoctorEarning {
+  id                      String   @id @default(uuid())
+  doctorId                String   @map("doctor_id")
+  bookingId               String   @unique @map("booking_id")
+  grossAmountPaise        Int      @map("gross_amount_paise")
+  platformCommissionPaise Int      @map("platform_commission_paise")
+  netAmountPaise          Int      @map("net_amount_paise")
+  isPaidOut               Boolean  @default(false) @map("is_paid_out")
+  payoutId                String?  @map("payout_id")
+  createdAt               DateTime @default(now()) @map("created_at") @db.Timestamptz
+
+  doctor  DoctorProfile @relation(fields: [doctorId], references: [id])
+  booking Booking       @relation(fields: [bookingId], references: [id])
+  payout  Payout?       @relation(fields: [payoutId], references: [id])
+
+  @@index([doctorId])
+  @@map("doctor_earnings")
+}
+
+model Payout {
+  id                String       @id @default(uuid())
+  doctorId          String       @map("doctor_id")
+  amountPaise       Int          @map("amount_paise")
+  status            PayoutStatus @default(REQUESTED)
+  utrNumber         String?      @map("utr_number")
+  bankAccountLast4  String?      @map("bank_account_last4")
+  requestedAt       DateTime     @default(now()) @map("requested_at") @db.Timestamptz
+  processedAt       DateTime?    @map("processed_at") @db.Timestamptz
+  processedBy       String?      @map("processed_by")
+  notes             String?
+
+  doctor    DoctorProfile @relation(fields: [doctorId], references: [id])
+  processor User?         @relation("PayoutProcessor", fields: [processedBy], references: [id])
+  earnings  DoctorEarning[]
+
+  @@index([doctorId, requestedAt(sort: Desc)])
+  @@index([status])
+  @@map("payouts")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// AUTH & VERIFICATION TABLES
+// ─────────────────────────────────────────────────────────────────────────────
+
+// v1.1: NEW
+model PasswordReset {
+  id         String    @id @default(uuid())
+  userId     String    @map("user_id")
+  tokenHash  String    @map("token_hash")   // bcrypt(12) of one-time token
+  expiresAt  DateTime  @map("expires_at") @db.Timestamptz  // 15 min
+  usedAt     DateTime? @map("used_at") @db.Timestamptz
+  createdAt  DateTime  @default(now()) @map("created_at") @db.Timestamptz
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, expiresAt])
+  @@map("password_resets")
+}
+
+// v1.1: NEW — OTP sends; phone_hash used (may not have user yet at REGISTER stage)
+model PhoneVerification {
+  id          String    @id @default(uuid())
+  phoneHash   String    @map("phone_hash")  // SHA-256(phone)
+  otpHash     String    @map("otp_hash")    // bcrypt(12) of 6-digit OTP
+  purpose     String                        // 'REGISTER' | 'LOGIN' | 'RESET_PASSWORD'
+  attempts    Int       @default(0)
+  expiresAt   DateTime  @map("expires_at") @db.Timestamptz  // 10 min
+  verifiedAt  DateTime? @map("verified_at") @db.Timestamptz
+  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz
+
+  @@index([phoneHash, purpose, expiresAt])
+  @@map("phone_verifications")
+}
+
+// v1.1: NEW
+model EmailVerification {
+  id          String    @id @default(uuid())
+  userId      String    @map("user_id")
+  tokenHash   String    @map("token_hash")  // bcrypt(12) of verification token
+  expiresAt   DateTime  @map("expires_at") @db.Timestamptz  // 24 h
+  verifiedAt  DateTime? @map("verified_at") @db.Timestamptz
+  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, expiresAt])
+  @@map("email_verifications")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SYSTEM SETTINGS
+// ─────────────────────────────────────────────────────────────────────────────
+
+// v1.1: NEW — admin-configurable key/value store; read via 1-hour Redis cache
+model SystemSetting {
+  id          String    @id @default(uuid())
+  key         String    @unique
+  value       Json
+  description String?
+  updatedBy   String?   @map("updated_by")
+  updatedAt   DateTime  @updatedAt @map("updated_at") @db.Timestamptz
+
+  updater User? @relation(fields: [updatedBy], references: [id])
+
+  @@map("system_settings")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// BLOG
+// ─────────────────────────────────────────────────────────────────────────────
+
+model BlogCategory {
+  id          String   @id @default(uuid())
+  name        String   @unique
+  slug        String   @unique
+  description String?
+  isActive    Boolean  @default(true) @map("is_active")
+  sortOrder   Int      @default(0) @map("sort_order")
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamptz
+
+  posts BlogPost[]
+
+  @@map("blog_categories")
+}
+
+model BlogPost {
+  id                   String     @id @default(uuid())
+  title                String
+  slug                 String     @unique
+  excerpt              String?
+  contentMarkdown      String     @map("content_markdown")
+  coverImageUrl        String?    @map("cover_image_url")
+  authorId             String     @map("author_id")
+  categoryId           String?    @map("category_id")
+  specialityId         String?    @map("speciality_id")
+  tags                 String[]   @db.Text
+  seoTitle             String?    @map("seo_title")
+  seoDescription       String?    @map("seo_description")
+  ogImageUrl           String?    @map("og_image_url")
+  estimatedReadMinutes Int        @default(3) @map("estimated_read_minutes")
+  status               BlogStatus @default(DRAFT)
+  publishedAt          DateTime?  @map("published_at") @db.Timestamptz
+  createdAt            DateTime   @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt            DateTime   @updatedAt @map("updated_at") @db.Timestamptz
+
+  author     User          @relation(fields: [authorId], references: [id])
+  category   BlogCategory? @relation(fields: [categoryId], references: [id])
+  speciality Speciality?   @relation(fields: [specialityId], references: [id])
+
+  @@index([publishedAt(sort: Desc)])
+  @@index([categoryId])
+  @@index([specialityId])
+  @@map("blog_posts")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// PHARMACY
+// ─────────────────────────────────────────────────────────────────────────────
+
+model PharmacyCategory {
+  id        String   @id @default(uuid())
+  name      String   @unique
+  slug      String   @unique
+  isActive  Boolean  @default(true) @map("is_active")
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz
+
+  products PharmacyProduct[]
+
+  @@map("pharmacy_categories")
+}
+
+model PharmacyProduct {
+  id                   String   @id @default(uuid())
+  name                 String
+  genericName          String?  @map("generic_name")
+  manufacturer         String?
+  sku                  String   @unique
+  pricePaise           Int      @map("price_paise")
+  mrpPaise             Int      @map("mrp_paise")
+  stockQuantity        Int      @default(0) @map("stock_quantity")
+  prescriptionRequired Boolean  @default(false) @map("prescription_required")
+  imageUrl             String?  @map("image_url")
+  categoryId           String?  @map("category_id")
+  description          String?
+  isActive             Boolean  @default(true) @map("is_active")
+  createdAt            DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt            DateTime @updatedAt @map("updated_at") @db.Timestamptz
+
+  category PharmacyCategory? @relation(fields: [categoryId], references: [id])
+
+  @@index([categoryId])
+  @@map("pharmacy_products")
+}
+
+model PharmacyOrder {
+  id                  String              @id @default(uuid())
+  orderRef            String              @unique @map("order_ref")
+  patientId           String              @map("patient_id")
+  items               Json                // price-snapshot array; see docs/02-DATABASE.md §2.28
+  subtotalPaise       Int                 @map("subtotal_paise")
+  deliveryChargePaise Int                 @default(0) @map("delivery_charge_paise")
+  discountPaise       Int                 @default(0) @map("discount_paise")
+  totalPaise          Int                 @map("total_paise")
+  couponId            String?             @map("coupon_id")
+  deliveryAddress     Json                @map("delivery_address")
+  prescriptionUrl     String?             @map("prescription_url")
+  status              PharmacyOrderStatus @default(PLACED)
+  notes               String?
+  placedAt            DateTime            @default(now()) @map("placed_at") @db.Timestamptz
+  updatedAt           DateTime            @updatedAt @map("updated_at") @db.Timestamptz
+
+  patient     PatientProfile   @relation(fields: [patientId], references: [id])
+  coupon      Coupon?          @relation(fields: [couponId], references: [id])
+  redemptions CouponRedemption[]
+
+  @@index([patientId, placedAt(sort: Desc)])
+  @@index([status])
+  @@map("pharmacy_orders")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// FCM DEVICE TOKENS
+// ─────────────────────────────────────────────────────────────────────────────
+// Mobile app registers its token after login; server uses it for push notifications.
+
+model DeviceToken {
+  id        String   @id @default(uuid())
+  userId    String   @map("user_id")
+  token     String   @unique
+  platform  String   // 'android' | 'ios' | 'web'
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("device_tokens")
+}

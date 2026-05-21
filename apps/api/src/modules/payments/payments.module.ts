@@ -1,5 +1,15 @@
 import { Module } from '@nestjs/common';
+import { PaymentsController } from './payments.controller';
+import { PaymentsService } from './payments.service';
+import { BookingsModule } from '../bookings/bookings.module';
 
-// Stub — fully implemented in Phase 4+
-@Module({})
+@Module({
+  imports: [
+    // BookingsService.confirmBooking is called after payment.captured
+    BookingsModule,
+  ],
+  controllers: [PaymentsController],
+  providers: [PaymentsService],
+  exports: [PaymentsService],
+})
 export class PaymentsModule {}

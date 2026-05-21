@@ -1,0 +1,12 @@
+[build]
+# Railway auto-detects the Dockerfile in this directory
+dockerfilePath = "Dockerfile"
+# Build context is the monorepo root (so COPY . . works)
+buildContext = "../.."
+
+[deploy]
+startCommand = "node dist/main"
+healthcheckPath = "/v1/health"
+healthcheckTimeout = 30
+restartPolicyType = "on_failure"
+restartPolicyMaxRetries = 3

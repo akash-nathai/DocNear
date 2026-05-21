@@ -42,3 +42,9 @@ expo-env.d.ts
 
 # Prisma
 apps/api/prisma/migrations/*/migration_lock.toml
+
+# Claude Code internal files
+.claude/
+
+# k6 test results (generated at runtime)
+infra/k6/results/

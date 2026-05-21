@@ -45,10 +45,10 @@ export const configValidationSchema = Joi.object({
   FCM_CLIENT_EMAIL: Joi.string().default(''),
   FCM_PRIVATE_KEY: Joi.string().default(''),
 
-  // Google OAuth
-  GOOGLE_CLIENT_ID: Joi.string().required(),
-  GOOGLE_CLIENT_SECRET: Joi.string().required(),
-  GOOGLE_CALLBACK_URL: Joi.string().uri().required(),
+  // Google OAuth (optional in development — set to enable Google sign-in)
+  GOOGLE_CLIENT_ID: Joi.string().default(''),
+  GOOGLE_CLIENT_SECRET: Joi.string().default(''),
+  GOOGLE_CALLBACK_URL: Joi.string().uri().default('http://localhost:4000/v1/auth/google/callback'),
 
   // Sentry
   SENTRY_DSN: Joi.string().uri().allow('').default(''),

@@ -1,5 +1,10 @@
 import { Module } from '@nestjs/common';
+import { ReviewsController } from './reviews.controller';
+import { ReviewsService } from './reviews.service';
 
-// Stub — fully implemented in Phase 4+
-@Module({})
+@Module({
+  controllers: [ReviewsController],
+  providers: [ReviewsService],
+  exports: [ReviewsService],
+})
 export class ReviewsModule {}
