@@ -1,0 +1,32 @@
+# Never send these into the Docker build context
+node_modules
+**/node_modules
+
+# Git history not needed in images
+.git
+.gitignore
+
+# Claude internal files
+.claude
+
+# Build outputs
+dist
+.next
+out
+build
+.turbo
+
+# Env files — values come from Railway env vars at runtime
+.env
+.env.*
+!.env.example
+
+# Dev-only infra
+infra/k6
+
+# Logs
+*.log
+
+# OS
+.DS_Store
+Thumbs.db

@@ -20,6 +20,7 @@ build/
 
 # TypeScript
 *.tsbuildinfo
+packages/shared-types/dist/
 
 # Logs
 *.log
