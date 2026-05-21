@@ -26,7 +26,7 @@ ARG NEXT_PUBLIC_APP_URL
 ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL
 ENV NEXT_PUBLIC_APP_URL=$NEXT_PUBLIC_APP_URL
 
-RUN pnpm --filter @docnear/shared-types build
+RUN ./node_modules/.bin/tsc --project packages/shared-types/tsconfig.json
 RUN pnpm --filter @docnear/web build
 
 # Stage 3: Runner

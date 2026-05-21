@@ -36,7 +36,9 @@ COPY . .
 
 # 1) Compile @docnear/shared-types to JS.
 #    Enums are runtime values — without this, Node tries to load .ts files.
-RUN pnpm --filter @docnear/shared-types build
+#    Use the hoisted tsc binary directly (packages/shared-types has no local
+#    node_modules so `pnpm --filter ... build` can't resolve the tsc binary).
+RUN ./node_modules/.bin/tsc --project packages/shared-types/tsconfig.json
 
 # 2) Generate Prisma client (schema-only, no live DB needed)
 RUN DATABASE_URL="postgresql://x:x@localhost:5432/x" \
