@@ -40,9 +40,10 @@ COPY . .
 #    node_modules so `pnpm --filter ... build` can't resolve the tsc binary).
 RUN ./node_modules/.bin/tsc --project packages/shared-types/tsconfig.json
 
-# 2) Generate Prisma client (schema-only, no live DB needed)
+# 2) Generate Prisma client (schema-only, no live DB needed).
+#    Use the hoisted binary directly — same pattern as tsc above.
 RUN DATABASE_URL="postgresql://x:x@localhost:5432/x" \
-    pnpm --filter @docnear/api exec prisma generate
+    ./node_modules/.bin/prisma generate --schema=./apps/api/prisma/schema.prisma
 
 # 3) Compile the NestJS API
 RUN pnpm --filter @docnear/api build
