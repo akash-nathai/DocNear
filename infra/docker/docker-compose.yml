@@ -1,0 +1,157 @@
+version: '3.9'
+
+# DocNear local development stack
+# Services: PostgreSQL 16 + PostGIS, Redis 7, Meilisearch, MinIO
+#
+# Usage:
+#   docker compose -f infra/docker/docker-compose.yml up -d
+#   docker compose -f infra/docker/docker-compose.yml down -v  # destroy volumes
+#
+# Ports exposed on localhost:
+#   5432  PostgreSQL
+#   6379  Redis
+#   7700  Meilisearch (http://localhost:7700 — master key in .env)
+#   9000  MinIO API
+#   9001  MinIO Console (http://localhost:9001)
+
+networks:
+  docnear-net:
+    driver: bridge
+
+volumes:
+  pgdata:
+  redisdata:
+  meilidata:
+  miniodata:
+
+services:
+  # ---------------------------------------------------------------------------
+  # PostgreSQL 16 with PostGIS 3.4
+  # ---------------------------------------------------------------------------
+  postgres:
+    image: postgis/postgis:16-3.4-alpine
+    container_name: docnear_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: docnear
+      POSTGRES_PASSWORD: docnear_dev_password
+      POSTGRES_DB: docnear_db
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./init-scripts:/docker-entrypoint-initdb.d:ro
+    ports:
+      - '5432:5432'
+    networks:
+      - docnear-net
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U docnear -d docnear_db']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
+  # ---------------------------------------------------------------------------
+  # Redis 7 — slot locking + session store + BullMQ queues
+  # ---------------------------------------------------------------------------
+  redis:
+    image: redis:7-alpine
+    container_name: docnear_redis
+    restart: unless-stopped
+    command: redis-server --requirepass docnear_redis_dev --appendonly yes
+    volumes:
+      - redisdata:/data
+    ports:
+      - '6379:6379'
+    networks:
+      - docnear-net
+    healthcheck:
+      test: ['CMD', 'redis-cli', '-a', 'docnear_redis_dev', 'ping']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ---------------------------------------------------------------------------
+  # Meilisearch — doctor/clinic full-text search
+  # ---------------------------------------------------------------------------
+  meilisearch:
+    image: getmeili/meilisearch:v1.9
+    container_name: docnear_meilisearch
+    restart: unless-stopped
+    environment:
+      MEILI_MASTER_KEY: docnear_meili_dev_key_change_in_prod
+      MEILI_ENV: development
+      MEILI_NO_ANALYTICS: 'true'
+    volumes:
+      - meilidata:/meili_data
+    ports:
+      - '7700:7700'
+    networks:
+      - docnear-net
+    healthcheck:
+      test:
+        [
+          'CMD',
+          'wget',
+          '--no-verbose',
+          '--tries=1',
+          '--spider',
+          'http://localhost:7700/health',
+        ]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  # ---------------------------------------------------------------------------
+  # MinIO — object storage (S3-compatible) for profile photos, prescriptions
+  # ---------------------------------------------------------------------------
+  minio:
+    image: minio/minio:latest
+    container_name: docnear_minio
+    restart: unless-stopped
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: docnear_minio_user
+      MINIO_ROOT_PASSWORD: docnear_minio_password_change_in_prod
+    volumes:
+      - miniodata:/data
+    ports:
+      - '9000:9000'
+      - '9001:9001'
+    networks:
+      - docnear-net
+    healthcheck:
+      test:
+        [
+          'CMD',
+          'curl',
+          '-f',
+          'http://localhost:9000/minio/health/live',
+        ]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  # ---------------------------------------------------------------------------
+  # MinIO bucket initialiser — runs once, creates required buckets
+  # ---------------------------------------------------------------------------
+  minio-init:
+    image: minio/mc:latest
+    container_name: docnear_minio_init
+    depends_on:
+      minio:
+        condition: service_healthy
+    networks:
+      - docnear-net
+    entrypoint: >
+      /bin/sh -c "
+        mc alias set local http://minio:9000 docnear_minio_user docnear_minio_password_change_in_prod;
+        mc mb --ignore-existing local/docnear-avatars;
+        mc mb --ignore-existing local/docnear-prescriptions;
+        mc mb --ignore-existing local/docnear-documents;
+        mc anonymous set download local/docnear-avatars;
+        echo 'MinIO buckets initialised.';
+        exit 0;
+      "
+    restart: on-failure
