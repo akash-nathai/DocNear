@@ -1,0 +1,14 @@
+# Railway config for @docnear/api
+# This file lives at the monorepo root so Railway picks it up automatically.
+# The Dockerfile uses the repo root as its build context (COPY . .).
+
+[build]
+# Path to Dockerfile from the repo root
+dockerfilePath = "apps/api/Dockerfile"
+
+[deploy]
+startCommand = "node dist/main"
+healthcheckPath = "/v1/health"
+healthcheckTimeout = 30
+restartPolicyType = "on_failure"
+restartPolicyMaxRetries = 3
