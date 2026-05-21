@@ -19,15 +19,15 @@ export const configValidationSchema = Joi.object({
   // Encryption (AES-256 — 64 hex chars = 32 bytes)
   ENCRYPTION_KEY: Joi.string().length(64).required(),
 
-  // Meilisearch
+  // Meilisearch (optional — search degrades gracefully if not configured)
   MEILISEARCH_HOST: Joi.string().default('http://localhost:7700'),
-  MEILISEARCH_API_KEY: Joi.string().required(),
+  MEILISEARCH_API_KEY: Joi.string().allow('').default(''),
 
-  // S3 / MinIO
-  S3_ENDPOINT: Joi.string().required(),
-  S3_ACCESS_KEY: Joi.string().required(),
-  S3_SECRET_KEY: Joi.string().required(),
-  S3_BUCKET: Joi.string().required(),
+  // S3 / MinIO (optional — file uploads disabled if not configured)
+  S3_ENDPOINT: Joi.string().allow('').default(''),
+  S3_ACCESS_KEY: Joi.string().allow('').default(''),
+  S3_SECRET_KEY: Joi.string().allow('').default(''),
+  S3_BUCKET: Joi.string().allow('').default('docnear'),
   S3_REGION: Joi.string().default('ap-south-1'),
 
   // Razorpay
