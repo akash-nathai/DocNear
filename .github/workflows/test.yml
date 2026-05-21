@@ -1,0 +1,62 @@
+name: Test
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+
+jobs:
+  test:
+    name: Unit Tests
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgis/postgis:16-3.4-alpine
+        env:
+          POSTGRES_USER: docnear
+          POSTGRES_PASSWORD: docnear_ci_password
+          POSTGRES_DB: docnear_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U docnear -d docnear_test"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Run tests
+        run: pnpm test
+        env:
+          NODE_ENV: test
+          DATABASE_URL: postgresql://docnear:docnear_ci_password@localhost:5432/docnear_test
+          REDIS_URL: redis://localhost:6379
+          JWT_ACCESS_SECRET: ci_access_secret_at_least_32_chars_long
+          JWT_REFRESH_SECRET: ci_refresh_secret_at_least_32_chars_long
+          ENCRYPTION_KEY: "0000000000000000000000000000000000000000000000000000000000000000"
