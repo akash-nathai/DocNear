@@ -14,7 +14,10 @@
 //     Prisma supports them natively for the postgresql provider.
 
 generator client {
-  provider = "prisma-client-js"
+  provider      = "prisma-client-js"
+  // Explicit targets prevent Prisma from trying to auto-detect OpenSSL on Alpine
+  // (musl-based Linux). "native" = local dev; "linux-musl-openssl-3.0.x" = Docker/Railway.
+  binaryTargets = ["native", "linux-musl-openssl-3.0.x"]
 }
 
 datasource db {

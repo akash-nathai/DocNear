@@ -26,6 +26,11 @@ RUN pnpm install --frozen-lockfile
 FROM node:20-alpine AS builder
 WORKDIR /app
 
+# openssl is required by Prisma to detect the SSL version on Alpine (musl).
+# Without it, `prisma generate` fails and tries to run `pnpm add @prisma/client`
+# which crashes in a Docker build environment.
+RUN apk add --no-cache openssl
+
 RUN corepack enable && corepack prepare pnpm@9 --activate
 
 # Copy installed node_modules from the deps stage
@@ -52,6 +57,9 @@ RUN pnpm --filter @docnear/api build
 FROM node:20-alpine AS runner
 WORKDIR /app
 ENV NODE_ENV=production
+
+# openssl needed by Prisma at runtime to connect to the database
+RUN apk add --no-cache openssl
 
 # Run as non-root
 RUN addgroup --system --gid 1001 nodejs && \

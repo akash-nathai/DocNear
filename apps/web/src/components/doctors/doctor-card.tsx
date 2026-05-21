@@ -1,4 +1,5 @@
 'use client';
+import React from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
 import { useLocale, useTranslations } from 'next-intl';
@@ -21,7 +22,7 @@ export interface DoctorCardData {
   nextSlotAt?: string;
 }
 
-export function DoctorCard({ doctor }: { doctor: DoctorCardData }) {
+export function DoctorCard({ doctor }: { doctor: DoctorCardData }): React.JSX.Element {
   const t = useTranslations('DoctorCard');
   const locale = useLocale();
   const feeRupees = Math.round(doctor.consultationFee / 100);
