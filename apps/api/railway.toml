@@ -1,9 +1,7 @@
 # Railway config for @docnear/api
-# This file lives at the monorepo root so Railway picks it up automatically.
-# The Dockerfile uses the repo root as its build context (COPY . .).
+# Lives at apps/api/railway.toml — Railway resolves dockerfilePath from the repo root.
 
 [build]
-# Path to Dockerfile from the repo root
 dockerfilePath = "apps/api/Dockerfile"
 
 [deploy]
